@@ -13,13 +13,36 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+// Pre-flight validation: refuse to hand in a broken entry instead of
+// letting the grader reject it. These mirror the scorer's own caps.
+function fail(msg) {
+  throw new Error(`Sky Courier hand-in refused: ${msg}`);
+}
+const gameDir = join(here, 'game');
+if (!existsSync(join(gameDir, 'index.html'))) fail('game/index.html is missing');
+const shotsDir = join(here, 'screenshots');
+if (!existsSync(shotsDir)) fail('screenshots/ is missing');
+const shots = readdirSync(shotsDir).filter((f) => /\.(png|jpe?g)$/i.test(f)).sort();
+if (shots.length < 3 || shots.length > 4) fail(`need 3 or 4 screenshots, found ${shots.length}`);
+for (const f of shots) {
+  const size = statSync(join(shotsDir, f)).size;
+  if (size > 262144) fail(`screenshot ${f} is ${size} bytes, over the 256 KiB cap`);
+}
+let gameFiles = 0;
+(function count(dir) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) count(join(dir, e.name));
+    else if (++gameFiles > 993) fail('game/ holds more than 993 files');
+  }
+})(gameDir);
 
 // Clear previous contents of the output directory, never the directory itself.
 mkdirSync(out, { recursive: true });

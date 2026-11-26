@@ -187,6 +187,7 @@ function update(dt, pressed) {
           state.fuel = Math.min(state.fuelMax, state.fuel + CFG.fuelRingBonus);
           sound.ring();
           flash(`RING ${r.id}  +${CFG.ringScore}`, `+${CFG.timeRingBonus}s  +${CFG.fuelRingBonus} fuel`, '#37d67a');
+          state.nextRing = r.id + 1;
           if (r.id === 4 || r.id === 8) {
             state.leg = r.id === 4 ? 2 : 3;
             state.mode = 'upgrade';
@@ -195,7 +196,6 @@ function update(dt, pressed) {
             return;
           }
           if (r.id === 12) state.nextRing = 13;
-          else state.nextRing = r.id + 1;
         } else {
           r.state = 'missed';
           flash(`RING ${r.id} MISSED`, 'Line up earlier next time', '#ff5a3c');
