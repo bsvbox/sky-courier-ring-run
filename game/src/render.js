@@ -33,6 +33,21 @@ function shade(hex, f) {
   const b = Math.round((n & 255) * f);
   return `rgb(${r},${g},${b})`;
 }
+// Parcel palettes: a stable hash of the segment index picks one colour per
+// segment, so fields read as patchwork, towns as blocks, canyons as rock.
+const PALETTES = {
+  fields: ['#5d8a3c', '#6b9a44', '#4f7d33', '#8a7d3c'],
+  hills: ['#4e7a34', '#5a8a3c', '#42682c', '#6b7a35'],
+  river: ['#3f7fb5', '#4a8cc4', '#35719f'],
+  town: ['#8a8578', '#7e796c', '#948d7c'],
+  canyon: ['#9a6b43', '#8a5f3b', '#a87a4e'],
+  runway: ['#5a5d63', '#5a5d63'],
+};
+function groundColor(seg) {
+  const pal = PALETTES[seg.zone] || PALETTES.fields;
+  const h = (seg.index * 2654435761) >>> 0;
+  return pal[h % pal.length];
+}
 
 // --- background ------------------------------------------------------------
 function drawSky(ctx, heading, t) {
@@ -174,6 +189,28 @@ function drawSprite(ctx, sp, x, y, s, t) {
   else if (sp.type === 'house') drawHouse(ctx, x, y, s);
   else if (sp.type === 'rock') drawRock(ctx, x, y, s);
   else if (sp.type === 'sock') drawSock(ctx, x, y, s, t);
+  else if (sp.type === 'tower') drawTower(ctx, x, y, s, t);
+}
+
+function drawTower(ctx, x, y, s, t) {
+  // Control tower: shaft, glass cab, antenna with a blinking beacon.
+  ctx.fillStyle = '#c8c4b8';
+  ctx.fillRect(x - s * 0.14, y - s * 1.9, s * 0.28, s * 1.9);
+  ctx.fillStyle = '#3a4a5a';
+  ctx.fillRect(x - s * 0.42, y - s * 2.3, s * 0.84, s * 0.45);
+  ctx.fillStyle = '#7ec8e8';
+  ctx.fillRect(x - s * 0.34, y - s * 2.22, s * 0.68, s * 0.28);
+  ctx.strokeStyle = '#8a8578';
+  ctx.lineWidth = Math.max(1, s * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(x, y - s * 2.3);
+  ctx.lineTo(x, y - s * 2.75);
+  ctx.stroke();
+  const pulse = 0.5 + Math.sin(t * 4) * 0.5;
+  ctx.fillStyle = `rgba(255, 60, 40, ${pulse})`;
+  ctx.beginPath();
+  ctx.arc(x, y - s * 2.8, s * 0.09, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // --- plane (chase view, from behind) ---------------------------------------
@@ -183,7 +220,7 @@ function drawPlane(ctx, plane, t) {
   // 16 m below it. This keeps the plane and the ring gates on the same
   // projection, so flying at a gate's height puts the plane inside the ring.
   const cy = HORIZON + (CFG.cameraDepth / 60) * 16 * (H / 2) * 0.9 - plane.pitch * 26;
-  const s = 1 + plane.speedNorm * 0.06;
+  const s = (1 + plane.speedNorm * 0.06) * 1.12;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(plane.bank * 0.38);
@@ -216,7 +253,7 @@ function drawPlane(ctx, plane, t) {
   ctx.lineTo(-44, -40);
   ctx.closePath();
   ctx.fill();
-  // Main wings.
+  // Main wings, with a dark edge so the white reads against bright sky.
   ctx.fillStyle = '#e8e2d2';
   ctx.beginPath();
   ctx.moveTo(-122, -2);
@@ -225,6 +262,9 @@ function drawPlane(ctx, plane, t) {
   ctx.lineTo(-106, 18);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = 'rgba(20, 30, 45, 0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
   ctx.fillStyle = '#d8553a';
   ctx.fillRect(-122, -2, 244, 5);
   // Fuselage: shorter and wider than a rocket, nose at the far end.
@@ -240,6 +280,9 @@ function drawPlane(ctx, plane, t) {
   ctx.quadraticCurveTo(19, -20, 16, -84);
   ctx.quadraticCurveTo(0, -94, -16, -84);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(20, 30, 45, 0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
   // Cockpit glass.
   ctx.fillStyle = '#7ec8e8';
   ctx.beginPath();
@@ -267,6 +310,22 @@ function drawPlane(ctx, plane, t) {
   ctx.arc(120, 8, 5, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Wingtip contrails: fading white trails behind the plane, tilted by bank.
+  const tilt = plane.bank * 30;
+  for (const side of [-1, 1]) {
+    const x0 = cx + side * 118 - tilt;
+    const y0 = cy + 12;
+    const grad = ctx.createLinearGradient(x0, y0, x0 + tilt * 0.4, y0 + 85);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + tilt * 0.4, y0 + 85);
+    ctx.stroke();
+  }
 }
 
 // --- HUD -------------------------------------------------------------------
@@ -471,6 +530,28 @@ function drawScore(ctx, score, timeLeft, leg) {
   ctx.fillText(`TIME ${fmtTime(Math.max(0, timeLeft))}`, W - 36, 254);
 }
 
+const LEG_NAMES = ['CANYON RUN', 'RIVER DASH', 'HOME RUNWAY'];
+
+// Mission banner: leg, mission name and ring progress in one glance,
+// so the game's progression reads in a single screenshot.
+function drawMissionBanner(ctx, leg, nextRing) {
+  const label = `LEG ${leg}/3  ·  ${LEG_NAMES[leg - 1]}  ·  RING ${Math.min(nextRing, 12)}/12`;
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  const w = ctx.measureText(label).width + 28;
+  const x = W / 2 - w / 2;
+  const y = 96; // below the compass strip and its HDG readout
+  ctx.fillStyle = 'rgba(10, 20, 32, 0.65)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 26, 13);
+  ctx.fill();
+  ctx.strokeStyle = '#37e6ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#7dffb0';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, W / 2, y + 18);
+}
+
 function drawFlash(ctx, text, sub, color) {
   if (!text) return;
   ctx.save();
@@ -578,7 +659,7 @@ function drawUpgrade(ctx, state) {
 }
 
 function drawEnd(ctx, state, won) {
-  ctx.fillStyle = 'rgba(8, 16, 28, 0.62)';
+  ctx.fillStyle = 'rgba(8, 16, 28, 0.5)';
   ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
   ctx.fillStyle = won ? '#37d67a' : '#ff5a3c';
@@ -649,8 +730,9 @@ export function render(ctx, state, world, t) {
     const p = projected[i];
     if (p.s1 <= 0) continue;
     const seg = p.seg;
-    // Ground strip: subtle alternating shade, never a hard band.
-    ctx.fillStyle = p.n % 2 === 0 ? seg.ground : shade(seg.ground, 0.94);
+    // Ground strip: parcel colour per segment (patchwork fields, town blocks,
+    // canyon rock) with a subtle alternating shade so bands never read flat.
+    ctx.fillStyle = p.n % 2 === 0 ? groundColor(seg) : shade(groundColor(seg), 0.93);
     ctx.beginPath();
     ctx.moveTo(p.x1 - p.w1, p.y1);
     ctx.lineTo(p.x1 + p.w1, p.y1);
@@ -679,16 +761,65 @@ export function render(ctx, state, world, t) {
       ctx.fillRect(p.x1 - p.w1 * 0.86, p.y1 - 1, p.w1 * 0.03, 2);
       ctx.fillRect(p.x1 + p.w1 * 0.83, p.y1 - 1, p.w1 * 0.03, 2);
     }
-    // River banks.
+    // Town streets: a dark road down the centre of the block.
+    if (seg.zone === 'town') {
+      ctx.fillStyle = '#5d5a52';
+      ctx.beginPath();
+      ctx.moveTo(p.x1 - p.w1 * 0.06, p.y1);
+      ctx.lineTo(p.x1 + p.w1 * 0.06, p.y1);
+      ctx.lineTo(p.x2 + p.w2 * 0.06, p.y2);
+      ctx.lineTo(p.x2 - p.w2 * 0.06, p.y2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // River banks: sandy edges on the water.
     if (seg.zone === 'river') {
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
       ctx.fillRect(p.x1 - p.w1, p.y1 - 1, p.w1 * 2, 2);
+      ctx.fillStyle = '#c9b078';
+      ctx.beginPath();
+      ctx.moveTo(p.x1 - p.w1, p.y1);
+      ctx.lineTo(p.x1 - p.w1 * 0.92, p.y1);
+      ctx.lineTo(p.x2 - p.w2 * 0.92, p.y2);
+      ctx.lineTo(p.x2 - p.w2, p.y2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(p.x1 + p.w1 * 0.92, p.y1);
+      ctx.lineTo(p.x1 + p.w1, p.y1);
+      ctx.lineTo(p.x2 + p.w2, p.y2);
+      ctx.lineTo(p.x2 + p.w2 * 0.92, p.y2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Canyon walls: dark rock rising on both edges of the gorge.
+    if (seg.zone === 'canyon') {
+      ctx.fillStyle = '#6e4526';
+      ctx.beginPath();
+      ctx.moveTo(p.x1 - p.w1, p.y1);
+      ctx.lineTo(p.x1 - p.w1 * 0.55, p.y1);
+      ctx.lineTo(p.x2 - p.w2 * 0.55, p.y2);
+      ctx.lineTo(p.x2 - p.w2, p.y2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(p.x1 + p.w1 * 0.55, p.y1);
+      ctx.lineTo(p.x1 + p.w1, p.y1);
+      ctx.lineTo(p.x2 + p.w2, p.y2);
+      ctx.lineTo(p.x2 + p.w2 * 0.55, p.y2);
+      ctx.closePath();
+      ctx.fill();
+      // Wall-top highlight.
+      ctx.fillStyle = 'rgba(255, 220, 160, 0.25)';
+      ctx.fillRect(p.x1 - p.w1 * 0.62, p.y1 - 1, p.w1 * 0.07, 2);
+      ctx.fillRect(p.x1 + p.w1 * 0.55, p.y1 - 1, p.w1 * 0.07, 2);
     }
     // Sprites: world X = road centre at this segment + lateral offset.
+    // Screen size uses the same projection as the terrain: size is metres.
     for (const sp of seg.sprites) {
       const sx = W / 2 + p.s1 * (p.x + sp.offset * CFG.groundHalf - camX) * (W / 2);
       const sy = p.y1;
-      const ss = p.s1 * 42 * sp.size * (W / 2) / 640;
+      const ss = p.s1 * sp.size * (H / 2) * 0.9;
       drawSprite(ctx, sp, sx, sy, Math.max(1, ss), t);
     }
     // Ring gate.
@@ -748,6 +879,7 @@ export function render(ctx, state, world, t) {
   if (mode === 'fly' || mode === 'upgrade' || mode === 'pause') {
     drawHorizon(ctx, plane);
     drawCompass(ctx, heading);
+    drawMissionBanner(ctx, state.leg, state.nextRing);
     drawSpeed(ctx, plane);
     drawFuel(ctx, state.fuel, state.fuelMax);
     drawRings(ctx, state.rings, state.nextRing);

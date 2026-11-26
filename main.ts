@@ -13,8 +13,8 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
@@ -37,10 +37,19 @@ for (const f of shots) {
   if (size > 262144) fail(`screenshot ${f} is ${size} bytes, over the 256 KiB cap`);
 }
 let gameFiles = 0;
+const textExts = new Set(['.html', '.js', '.mjs', '.css', '.json', '.txt', '.md']);
 (function count(dir) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) count(join(dir, e.name));
-    else if (++gameFiles > 993) fail('game/ holds more than 993 files');
+    else {
+      if (++gameFiles > 993) fail('game/ holds more than 993 files');
+      // The game must run offline: no file it ships may fetch the network.
+      if (textExts.has(extname(e.name).toLowerCase())) {
+        const text = readFileSync(join(dir, e.name), 'utf8');
+        const hit = text.match(/https?:\/\/[^\s"'`]+/);
+        if (hit) fail(`${e.name} references an external URL (${hit[0]}); the game must load no network`);
+      }
+    }
   }
 })(gameDir);
 

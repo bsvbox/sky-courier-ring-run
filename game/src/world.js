@@ -48,39 +48,44 @@ export function buildWorld(seed) {
     };
   });
 
-  // Sprites: trees on fields/hills, houses in town, windsocks near runway.
+  // Sprites: trees on fields/hills, houses in town, rocks in the canyon.
+  // Sizes are world metres now: landmarks must be big (30-85 m) to read
+  // at 1280x720 from hundreds of metres away.
   for (let i = 10; i < CFG.segments; i += 1) {
     const seg = segments[i];
     if (seg.zone === 'fields' || seg.zone === 'hills') {
-      if (rng() < 0.16) {
+      if (rng() < 0.24) {
         seg.sprites.push({
           type: 'tree',
-          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.55, 1.35),
-          size: range(rng, 0.8, 1.5),
+          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.45, 1.2),
+          size: range(rng, 30, 55),
         });
       }
     } else if (seg.zone === 'town') {
-      if (rng() < 0.3) {
+      if (rng() < 0.5) {
         seg.sprites.push({
           type: 'house',
-          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.5, 1.1),
-          size: range(rng, 0.9, 1.4),
+          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.4, 1.0),
+          size: range(rng, 50, 85),
         });
       }
     } else if (seg.zone === 'canyon') {
-      if (rng() < 0.12) {
+      if (rng() < 0.18) {
         seg.sprites.push({
           type: 'rock',
-          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.9, 1.4),
-          size: range(rng, 1.0, 2.0),
+          offset: (rng() < 0.5 ? -1 : 1) * range(rng, 0.85, 1.35),
+          size: range(rng, 40, 85),
         });
       }
     }
   }
+  // Control tower beside the runway threshold: the landing landmark.
+  segments[CFG.runwayStart + 4].sprites.push({ type: 'tower', offset: -1.25, size: 60 });
+  segments[CFG.runwayStart + 30].sprites.push({ type: 'tower', offset: 1.25, size: 55 });
   // Windsock row along the runway edges.
   for (let i = CFG.runwayStart + 8; i < CFG.segments; i += 24) {
-    segments[i].sprites.push({ type: 'sock', offset: -1.05, size: 1 });
-    segments[i].sprites.push({ type: 'sock', offset: 1.05, size: 1 });
+    segments[i].sprites.push({ type: 'sock', offset: -1.05, size: 8 });
+    segments[i].sprites.push({ type: 'sock', offset: 1.05, size: 8 });
   }
 
   // Clouds: fixed positions in the sky, parallax by heading.

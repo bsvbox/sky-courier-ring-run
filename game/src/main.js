@@ -302,6 +302,36 @@ function applyShot() {
     state.leg = 2;
     state.t = 40;
     flash('RING 5 AHEAD', 'River crossing', '#37e6ff', 999);
+  } else if (shot === 'canyon') {
+    state.mode = 'fly';
+    const ring10 = world.segments[CFG.ringZ[9]].ring;
+    state.z = CFG.ringZ[9] - 12; // 300 m out, between the canyon walls
+    state.y = world.segments[CFG.ringZ[9]].y + ring10.y; // at gate height
+    // Line the camera up with the gate: mirror the renderer's curve
+    // accumulation from the camera segment to the ring segment.
+    let accX = 0;
+    let accDx = 0;
+    for (let n = Math.floor(state.z); n < CFG.ringZ[9]; n++) {
+      accX += accDx;
+      accDx += world.segments[n].curve;
+    }
+    state.x = (accX + ring10.x * CFG.groundHalf) / CFG.groundHalf;
+    state.speed = 248;
+    state.throttle = 0.85;
+    state.pitch = -0.05;
+    state.bank = 0.4;
+    state.heading = 348;
+    state.score = 940;
+    state.timeLeft = 118;
+    state.fuel = 58;
+    state.rings.forEach((r) => {
+      if (r.id <= 9) r.state = 'hit';
+    });
+    state.nextRing = 10;
+    state.leg = 3;
+    state.upgrades = ['engine'];
+    state.t = 88;
+    flash('RING 10 AHEAD', 'Through the canyon', '#37e6ff', 999);
   } else if (shot === 'cruise') {
     state.mode = 'fly';
     state.z = CFG.ringZ[8] + 4; // just past ring 9, town below
