@@ -332,6 +332,26 @@ function applyShot() {
     state.upgrades = ['engine'];
     state.t = 88;
     flash('RING 10 AHEAD', 'Through the canyon', '#37e6ff', 999);
+  } else if (shot === 'upgrade') {
+    state.mode = 'upgrade';
+    state.z = CFG.ringZ[3] + 4; // just past ring 4, leg 2 begins
+    state.y = world.segments[CFG.ringZ[3]].y + 200;
+    state.x = 0;
+    state.speed = 0;
+    state.throttle = 0;
+    state.pitch = 0;
+    state.bank = 0;
+    state.heading = 348;
+    state.score = 400;
+    state.timeLeft = 150;
+    state.fuel = 70;
+    state.rings.forEach((r) => {
+      if (r.id <= 4) r.state = 'hit';
+    });
+    state.nextRing = 5;
+    state.leg = 2;
+    state.upgrades = [];
+    state.t = 55;
   } else if (shot === 'cruise') {
     state.mode = 'fly';
     state.z = CFG.ringZ[8] + 4; // just past ring 9, town below
@@ -405,12 +425,14 @@ window.__skyCourier = {
       yAbs: world.segments[CFG.ringZ[r.id - 1]].y + r.y,
     })),
   }),
-  debugWarp(z, x, y) {
+  debugWarp(z, x, y, speed = 200) {
     state.z = z;
     state.x = x;
     state.y = y;
-    state.speed = 200;
-    state.throttle = 0.7;
+    state.speed = speed;
+    state.throttle = Math.min(1, speed / 300);
+    state.pitch = 0;
+    state.bank = 0;
   },
 };
 
